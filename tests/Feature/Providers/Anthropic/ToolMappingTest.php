@@ -1,6 +1,7 @@
 <?php
 
 use Illuminate\Support\Facades\Http;
+use Laravel\Ai\Providers\Tools\Advisor;
 use Laravel\Ai\Providers\Tools\FileSearch;
 use Tests\Fixtures\Agents\NamedToolAgent;
 use Tests\Fixtures\Agents\ToolUsingAgent;
@@ -60,6 +61,53 @@ test('tool with a name() method emits the declared name', function () {
         return in_array('aliased_tool', $names, true);
     });
 });
+
+test('advisor tool maps to advisor_20260301 definition with model', function () {
+    Http::fake([
+        'api.anthropic.com/*' => $this->fakeTextResponse('ok'),
+    ]);
+
+    agent(
+        'Test advisor',
+        tools: [new Advisor(model: 'claude-opus-4-6')],
+    )->prompt('plan', provider: 'anthropic');
+
+    Http::assertSent(function ($request) {
+        $advisor = collect($request->data()['tools'] ?? [])->firstWhere('type', 'advisor_20260301');
+
+        return $advisor !== null
+            && $advisor['name'] === 'advisor'
+            && $advisor['model'] === 'claude-opus-4-6'
+            && ! isset($advisor['max_uses'])
+            && ! isset($advisor['caching']);
+    });
+});
+
+test('advisor tool passes max_uses and caching when set', function () {
+    Http::fake([
+        'api.anthropic.com/*' => $this->fakeTextResponse('ok'),
+    ]);
+
+    agent(
+        'Test advisor',
+        tools: [new Advisor(model: 'claude-opus-4-6', maxUses: 4, cacheTtl: '1h')],
+    )->prompt('plan', provider: 'anthropic');
+
+    Http::assertSent(function ($request) {
+        $advisor = collect($request->data()['tools'] ?? [])->firstWhere('type', 'advisor_20260301');
+
+        return $advisor['max_uses'] === 4
+            && $advisor['caching'] === ['type' => 'ephemeral', 'ttl' => '1h'];
+    });
+});
+
+test('advisor constructor rejects invalid cacheTtl', function () {
+    new Advisor(model: 'claude-opus-4-6', cacheTtl: '10m');
+})->throws(InvalidArgumentException::class);
+
+test('advisor constructor rejects empty model', function () {
+    new Advisor(model: '');
+})->throws(InvalidArgumentException::class);
 
 test('empty schema still includes input schema with type object', function () {
     Http::fake([
