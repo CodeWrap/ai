@@ -5,6 +5,7 @@ use Illuminate\Support\Facades\Http;
 use Laravel\Ai\Files\Base64Document;
 use Laravel\Ai\Gateway\Anthropic\AnthropicGateway;
 use Laravel\Ai\Messages\AssistantMessage;
+use Laravel\Ai\Responses\Data\ToolCall;
 use Tests\Feature\Agents\AssistantAgent;
 use Tests\Feature\Agents\ToolUsingAgent;
 
@@ -284,6 +285,45 @@ test('assistant message without contentBlocks falls back to text plus tool calls
         ->and($mapped[0]['content'])->toBe([
             ['type' => 'text', 'text' => 'Hello'],
         ]);
+});
+
+test('empty tool arguments serialize as object on assistant replay', function () {
+    $assistant = new AssistantMessage('Listing.', collect([
+        new ToolCall(
+            id: 'toolu_empty',
+            name: 'ListTool',
+            arguments: [],
+        ),
+    ]));
+
+    $gateway = app(AnthropicGateway::class);
+    $method = (new ReflectionClass($gateway))->getMethod('mapMessages');
+    $method->setAccessible(true);
+
+    $mapped = $method->invoke($gateway, [$assistant]);
+    $toolUse = collect($mapped[0]['content'])->firstWhere('type', 'tool_use');
+
+    expect($toolUse['input'])->toBeInstanceOf(stdClass::class)
+        ->and(get_object_vars($toolUse['input']))->toBeEmpty();
+});
+
+test('non-empty tool arguments preserve shape on assistant replay', function () {
+    $assistant = new AssistantMessage('Searching.', collect([
+        new ToolCall(
+            id: 'toolu_args',
+            name: 'SearchTool',
+            arguments: ['query' => 'test'],
+        ),
+    ]));
+
+    $gateway = app(AnthropicGateway::class);
+    $method = (new ReflectionClass($gateway))->getMethod('mapMessages');
+    $method->setAccessible(true);
+
+    $mapped = $method->invoke($gateway, [$assistant]);
+    $toolUse = collect($mapped[0]['content'])->firstWhere('type', 'tool_use');
+
+    expect($toolUse['input'])->toBe(['query' => 'test']);
 });
 
 test('system instructions are not in messages array', function () {

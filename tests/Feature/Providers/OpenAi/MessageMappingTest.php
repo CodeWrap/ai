@@ -4,6 +4,11 @@ use Illuminate\Http\Client\Request;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Http;
 use Laravel\Ai\Files\Base64Document;
+use Laravel\Ai\Messages\AssistantMessage;
+use Laravel\Ai\Messages\ToolResultMessage;
+use Laravel\Ai\Messages\UserMessage;
+use Laravel\Ai\Responses\Data\ToolCall;
+use Laravel\Ai\Responses\Data\ToolResult;
 use Tests\Feature\Agents\AssistantAgent;
 use Tests\Feature\Agents\ToolUsingAgent;
 
@@ -120,6 +125,96 @@ test('uploaded pdf file maps to input file', function () {
 
         return $fileBlock !== null
             && str_contains($fileBlock['file_data'], 'application/pdf');
+    });
+});
+
+test('empty tool arguments serialize as object string on assistant replay', function () {
+    Http::fake([
+        'api.openai.com/*' => fakeOpenAiResponse('hi'),
+    ]);
+
+    \Laravel\Ai\agent(
+        instructions: 'Hi.',
+        tools: [new ToolUsingAgent(fixed: true)->tools()[0]],
+        messages: [
+            new UserMessage('list'),
+            new AssistantMessage('Listing.', collect([
+                new ToolCall(
+                    id: 'call_empty',
+                    name: 'FixedNumberGenerator',
+                    arguments: [],
+                    resultId: 'call_empty',
+                ),
+            ])),
+            new ToolResultMessage(collect([
+                new ToolResult(
+                    id: 'call_empty',
+                    name: 'FixedNumberGenerator',
+                    arguments: [],
+                    result: '42',
+                    resultId: 'call_empty',
+                ),
+            ])),
+            new UserMessage('thanks'),
+        ],
+    )->prompt('', provider: 'openai');
+
+    Http::assertSent(function (Request $request) {
+        $body = json_decode($request->body(), true);
+        $fnCall = collect($body['input'] ?? [])
+            ->firstWhere('type', 'function_call');
+
+        if (! $fnCall) {
+            return false;
+        }
+
+        return $fnCall['arguments'] === '{}';
+    });
+});
+
+test('non-empty tool arguments preserve shape on assistant replay', function () {
+    Http::fake([
+        'api.openai.com/*' => fakeOpenAiResponse('hi'),
+    ]);
+
+    \Laravel\Ai\agent(
+        instructions: 'Hi.',
+        tools: [new ToolUsingAgent(fixed: true)->tools()[0]],
+        messages: [
+            new UserMessage('search'),
+            new AssistantMessage('Searching.', collect([
+                new ToolCall(
+                    id: 'call_args',
+                    name: 'FixedNumberGenerator',
+                    arguments: ['query' => 'test'],
+                    resultId: 'call_args',
+                ),
+            ])),
+            new ToolResultMessage(collect([
+                new ToolResult(
+                    id: 'call_args',
+                    name: 'FixedNumberGenerator',
+                    arguments: ['query' => 'test'],
+                    result: '42',
+                    resultId: 'call_args',
+                ),
+            ])),
+            new UserMessage('thanks'),
+        ],
+    )->prompt('', provider: 'openai');
+
+    Http::assertSent(function (Request $request) {
+        $body = json_decode($request->body(), true);
+        $fnCall = collect($body['input'] ?? [])
+            ->firstWhere('type', 'function_call');
+
+        if (! $fnCall) {
+            return false;
+        }
+
+        $args = json_decode($fnCall['arguments'], true);
+
+        return $args === ['query' => 'test'];
     });
 });
 
