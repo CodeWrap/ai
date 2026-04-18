@@ -58,6 +58,7 @@ trait HandlesTextStreaming
         $currentSignature = '';
         $currentToolIndex = -1;
         $pendingToolCalls = [];
+        $serverToolInputBuffers = [];
         $responseContent = [];
 
         $inputTokens = 0;
@@ -239,6 +240,8 @@ trait HandlesTextStreaming
                     if ($currentToolIndex >= 0 && isset($pendingToolCalls[$currentToolIndex])) {
                         $pendingToolCalls[$currentToolIndex]['arguments'] .= $partial;
                     }
+                } elseif ($deltaType === 'input_json_delta' && $currentBlockType === 'server_tool_use') {
+                    $serverToolInputBuffers[$currentBlockIndex] = ($serverToolInputBuffers[$currentBlockIndex] ?? '').($data['delta']['partial_json'] ?? '');
                 }
 
                 continue;
@@ -295,7 +298,15 @@ trait HandlesTextStreaming
                         time(),
                     ))->withInvocationId($invocationId);
                 } elseif ($currentBlockType === 'server_tool_use') {
-                    $index = $data['index'] ?? count($responseContent) - 1;
+                    $index = $data['index'] ?? $currentBlockIndex;
+
+                    if (isset($serverToolInputBuffers[$index])) {
+                        $parsed = json_decode($serverToolInputBuffers[$index], true);
+
+                        if (is_array($parsed)) {
+                            $responseContent[$index]['input'] = $parsed;
+                        }
+                    }
 
                     yield (new ProviderToolEvent(
                         $this->generateEventId(),
