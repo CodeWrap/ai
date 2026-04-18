@@ -9,6 +9,7 @@ class ReasoningEnd extends StreamEvent
         public string $reasoningId,
         public int $timestamp,
         public ?array $summary = null,
+        public ?string $signature = null,
     ) {
         //
     }
@@ -25,6 +26,7 @@ class ReasoningEnd extends StreamEvent
             'reasoning_id' => $this->reasoningId,
             'timestamp' => $this->timestamp,
             'summary' => $this->summary,
+            'signature' => $this->signature,
         ];
     }
 

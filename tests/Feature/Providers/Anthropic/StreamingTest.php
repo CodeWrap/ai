@@ -110,6 +110,36 @@ describe('thinking blocks', function () {
         expect($reasoningDelta->delta)->toBe('Let me think...');
     });
 
+    test('streaming exposes signature on ReasoningEnd', function () {
+        Http::fake([
+            'api.anthropic.com/*' => Http::response(
+                body: $this->ssePayload([
+                    $this->messageStart(),
+                    $this->contentBlockStart(0, ['type' => 'thinking', 'thinking' => '']),
+                    $this->contentBlockDelta(0, ['type' => 'thinking_delta', 'thinking' => 'Reasoning...']),
+                    $this->contentBlockDelta(0, ['type' => 'signature_delta', 'signature' => 'sig_part1']),
+                    $this->contentBlockDelta(0, ['type' => 'signature_delta', 'signature' => '_part2']),
+                    $this->contentBlockStop(0),
+                    $this->contentBlockStart(1, ['type' => 'text', 'text' => '']),
+                    $this->contentBlockDelta(1, ['type' => 'text_delta', 'text' => 'Answer']),
+                    $this->contentBlockStop(1),
+                    $this->messageDelta('end_turn', 10),
+                ]),
+                status: 200,
+                headers: ['Content-Type' => 'text/event-stream'],
+            ),
+        ]);
+
+        $events = $this->collectStreamEvents();
+
+        $reasoningEnd = collect($events)
+            ->filter(fn ($e) => $e instanceof ReasoningEnd)
+            ->first();
+
+        expect($reasoningEnd)->not->toBeNull()
+            ->and($reasoningEnd->signature)->toBe('sig_part1_part2');
+    });
+
     test('streaming handles server tool use', function () {
         Http::fake([
             'api.anthropic.com/*' => Http::response(
