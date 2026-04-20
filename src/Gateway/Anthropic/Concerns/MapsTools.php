@@ -52,7 +52,7 @@ trait MapsTools
         }
 
         return [
-            'name' => class_basename($tool),
+            'name' => method_exists($tool, 'name') ? $tool->name() : class_basename($tool),
             'description' => (string) $tool->description(),
             'input_schema' => $inputSchema,
         ];

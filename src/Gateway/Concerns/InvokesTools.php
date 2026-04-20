@@ -42,7 +42,9 @@ trait InvokesTools
     protected function findTool(string $name, array $tools): ?Tool
     {
         foreach ($tools as $tool) {
-            if ($tool instanceof Tool && class_basename($tool) === $name) {
+            $toolName = method_exists($tool, 'name') ? $tool->name() : class_basename($tool);
+
+            if ($tool instanceof Tool && $toolName === $name) {
                 return $tool;
             }
         }
