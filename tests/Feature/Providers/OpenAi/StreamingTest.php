@@ -2,6 +2,8 @@
 
 use Illuminate\Support\Facades\Http;
 use Laravel\Ai\Responses\Data\FinishReason;
+use Laravel\Ai\Responses\Data\UrlCitation;
+use Laravel\Ai\Streaming\Events\Citation as CitationEvent;
 use Laravel\Ai\Streaming\Events\Error;
 use Laravel\Ai\Streaming\Events\ReasoningDelta;
 use Laravel\Ai\Streaming\Events\ReasoningEnd;
@@ -193,3 +195,69 @@ test('streaming finish reason maps correctly', function (string $status, string 
     'unknown status maps to Unknown' => ['mystery_status', 'message', FinishReason::Unknown],
     'completed unknown type maps to Unknown' => ['completed', 'mystery_output', FinishReason::Unknown],
 ]);
+
+test('streaming emits citation events from response completed', function () {
+    Http::fake([
+        'api.openai.com/*' => Http::response(
+            body: $this->ssePayload([
+                $this->responseCreated(),
+                $this->outputTextDelta('According to sources'),
+                $this->outputTextDone('According to sources'),
+                $this->responseCompleted(10, 5, output: [
+                    [
+                        'type' => 'message',
+                        'status' => 'completed',
+                        'role' => 'assistant',
+                        'content' => [
+                            [
+                                'type' => 'output_text',
+                                'text' => 'According to sources',
+                                'annotations' => [
+                                    ['type' => 'url_citation', 'url' => 'https://example.com/one', 'title' => 'First Source', 'start_index' => 0, 'end_index' => 10],
+                                    ['type' => 'url_citation', 'url' => 'https://example.com/two', 'title' => 'Second Source', 'start_index' => 11, 'end_index' => 20],
+                                ],
+                            ],
+                        ],
+                    ],
+                ]),
+            ]),
+            status: 200,
+            headers: ['Content-Type' => 'text/event-stream'],
+        ),
+    ]);
+
+    $events = $this->collectStreamEvents();
+
+    $citations = array_values(array_filter($events, fn ($e) => $e instanceof CitationEvent));
+
+    expect($citations)->toHaveCount(2)
+        ->and($citations[0]->citation)->toBeInstanceOf(UrlCitation::class)
+        ->and($citations[0]->citation->url)->toBe('https://example.com/one')
+        ->and($citations[0]->citation->title)->toBe('First Source')
+        ->and($citations[1]->citation->url)->toBe('https://example.com/two')
+        ->and($citations[1]->citation->title)->toBe('Second Source');
+
+    $streamEnd = array_values(array_filter($events, fn ($e) => $e instanceof StreamEnd));
+    expect($streamEnd)->toHaveCount(1);
+});
+
+test('streaming emits no citation events when response has no annotations', function () {
+    Http::fake([
+        'api.openai.com/*' => Http::response(
+            body: $this->ssePayload([
+                $this->responseCreated(),
+                $this->outputTextDelta('Hello'),
+                $this->outputTextDone('Hello'),
+                $this->responseCompleted(10, 5),
+            ]),
+            status: 200,
+            headers: ['Content-Type' => 'text/event-stream'],
+        ),
+    ]);
+
+    $events = $this->collectStreamEvents();
+
+    $citations = array_filter($events, fn ($e) => $e instanceof CitationEvent);
+
+    expect($citations)->toBeEmpty();
+});
