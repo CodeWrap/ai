@@ -3,6 +3,7 @@
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Http;
 use Laravel\Ai\Enums\Lab;
+use Laravel\Ai\Providers\Tools\ImageGeneration;
 use Laravel\Ai\Providers\Tools\WebSearch;
 use Tests\Fixtures\Tools\FixedNumberGenerator;
 use Tests\Fixtures\Tools\NamedTool;
@@ -278,3 +279,131 @@ test('web search tool omits user_location when no location set', function () {
         return ! array_key_exists('user_location', $tool);
     });
 });
+
+test('image generation provider tool maps to openai image_generation type', function () {
+    Http::fake([
+        '*' => fakeOpenAiResponse('Here is the image'),
+    ]);
+
+    agent(tools: [(new ImageGeneration(quality: 'high', size: '1024x1024', partialImages: 2))->format('webp')->compression(80)])->prompt('Generate an image of a cat', provider: 'openai');
+
+    Http::assertSent(function (Request $request) {
+        $body = json_decode($request->body(), true);
+        $tool = collect(data_get($body, 'tools'))->firstWhere('type', 'image_generation');
+
+        return $tool !== null
+            && $tool['quality'] === 'high'
+            && $tool['size'] === '1024x1024'
+            && $tool['partial_images'] === 2
+            && $tool['output_format'] === 'webp'
+            && $tool['output_compression'] === 80;
+    });
+});
+
+test('image generation provider tool with defaults sends minimal config', function () {
+    Http::fake([
+        '*' => fakeOpenAiResponse('Here is the image'),
+    ]);
+
+    agent(tools: [new ImageGeneration])->prompt('Generate an image', provider: 'openai');
+
+    Http::assertSent(function (Request $request) {
+        $body = json_decode($request->body(), true);
+        $tool = collect(data_get($body, 'tools'))->firstWhere('type', 'image_generation');
+
+        return $tool !== null
+            && $tool === ['type' => 'image_generation'];
+    });
+});
+
+test('image generation preserves falsy values like zero', function () {
+    Http::fake([
+        '*' => fakeOpenAiResponse('Here is the image'),
+    ]);
+
+    agent(tools: [new ImageGeneration(partialImages: 0, outputCompression: 0)])->prompt('Generate an image', provider: 'openai');
+
+    Http::assertSent(function (Request $request) {
+        $body = json_decode($request->body(), true);
+        $tool = collect(data_get($body, 'tools'))->firstWhere('type', 'image_generation');
+
+        return $tool !== null
+            && array_key_exists('partial_images', $tool)
+            && $tool['partial_images'] === 0
+            && array_key_exists('output_compression', $tool)
+            && $tool['output_compression'] === 0;
+    });
+});
+
+test('image generation options bag passes through provider-specific params', function () {
+    Http::fake([
+        '*' => fakeOpenAiResponse('Here is the image'),
+    ]);
+
+    agent(tools: [
+        (new ImageGeneration(quality: 'high'))->withOptions([
+            'model' => 'gpt-image-1',
+            'moderation' => 'low',
+            'input_fidelity' => 'high',
+        ]),
+    ])->prompt('Generate an image', provider: 'openai');
+
+    Http::assertSent(function (Request $request) {
+        $body = json_decode($request->body(), true);
+        $tool = collect(data_get($body, 'tools'))->firstWhere('type', 'image_generation');
+
+        return $tool !== null
+            && $tool['quality'] === 'high'
+            && $tool['model'] === 'gpt-image-1'
+            && $tool['moderation'] === 'low'
+            && $tool['input_fidelity'] === 'high';
+    });
+});
+
+test('image generation options bag cannot override type', function () {
+    Http::fake([
+        '*' => fakeOpenAiResponse('Here is the image'),
+    ]);
+
+    agent(tools: [
+        (new ImageGeneration)->withOptions(['type' => 'should_be_stripped']),
+    ])->prompt('Generate an image', provider: 'openai');
+
+    Http::assertSent(function (Request $request) {
+        $body = json_decode($request->body(), true);
+        $tool = collect(data_get($body, 'tools'))->firstWhere('type', 'image_generation');
+
+        return $tool !== null
+            && $tool['type'] === 'image_generation';
+    });
+});
+
+test('image generation mask with no args omits input_image_mask', function () {
+    Http::fake([
+        '*' => fakeOpenAiResponse('Here is the image'),
+    ]);
+
+    agent(tools: [(new ImageGeneration)->mask()])->prompt('Generate an image', provider: 'openai');
+
+    Http::assertSent(function (Request $request) {
+        $body = json_decode($request->body(), true);
+        $tool = collect(data_get($body, 'tools'))->firstWhere('type', 'image_generation');
+
+        return $tool !== null
+            && ! array_key_exists('input_image_mask', $tool);
+    });
+});
+
+test('image generation rejects partial_images out of range', function (int $value) {
+    new ImageGeneration(partialImages: $value);
+})->with([
+    'negative' => [-1],
+    'above max' => [4],
+])->throws(InvalidArgumentException::class, 'partial_images must be between 0 and 3');
+
+test('image generation rejects output_compression out of range', function (int $value) {
+    new ImageGeneration(outputCompression: $value);
+})->with([
+    'negative' => [-1],
+    'above max' => [101],
+])->throws(InvalidArgumentException::class, 'output_compression must be between 0 and 100');

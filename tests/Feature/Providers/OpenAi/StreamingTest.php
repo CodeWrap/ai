@@ -5,6 +5,7 @@ use Laravel\Ai\Responses\Data\FinishReason;
 use Laravel\Ai\Responses\Data\UrlCitation;
 use Laravel\Ai\Streaming\Events\Citation as CitationEvent;
 use Laravel\Ai\Streaming\Events\Error;
+use Laravel\Ai\Streaming\Events\ProviderToolEvent;
 use Laravel\Ai\Streaming\Events\ReasoningDelta;
 use Laravel\Ai\Streaming\Events\ReasoningEnd;
 use Laravel\Ai\Streaming\Events\ReasoningStart;
@@ -260,4 +261,74 @@ test('streaming emits no citation events when response has no annotations', func
     $citations = array_filter($events, fn ($e) => $e instanceof CitationEvent);
 
     expect($citations)->toBeEmpty();
+});
+
+test('streaming emits provider tool events for image generation with realistic sequence', function () {
+    Http::fake([
+        'api.openai.com/*' => Http::response(
+            body: $this->ssePayload([
+                $this->responseCreated(),
+                [
+                    'type' => 'response.image_generation_call.in_progress',
+                    'item_id' => 'ig_1',
+                    'output_index' => 0,
+                ],
+                [
+                    'type' => 'response.image_generation_call.generating',
+                    'item_id' => 'ig_1',
+                    'output_index' => 0,
+                ],
+                [
+                    'type' => 'response.image_generation_call.partial_image',
+                    'item_id' => 'ig_1',
+                    'output_index' => 0,
+                    'partial_image_index' => 0,
+                    'partial_image_b64' => 'base64partial1',
+                ],
+                [
+                    'type' => 'response.image_generation_call.partial_image',
+                    'item_id' => 'ig_1',
+                    'output_index' => 0,
+                    'partial_image_index' => 1,
+                    'partial_image_b64' => 'base64partial2',
+                ],
+                [
+                    'type' => 'response.output_item.done',
+                    'item' => [
+                        'type' => 'image_generation_call',
+                        'id' => 'ig_1',
+                        'status' => 'completed',
+                        'result' => 'base64finalimage',
+                    ],
+                ],
+                $this->responseCompleted(10, 5),
+            ]),
+            status: 200,
+            headers: ['Content-Type' => 'text/event-stream'],
+        ),
+    ]);
+
+    $events = $this->collectStreamEvents();
+
+    $providerToolEvents = array_values(array_filter($events, fn ($e) => $e instanceof ProviderToolEvent));
+
+    // in_progress, generating, 2x partial_image, output_item.done
+    expect($providerToolEvents)->toHaveCount(5);
+
+    expect($providerToolEvents[0]->type)->toBe('image_generation_call')
+        ->and($providerToolEvents[0]->status)->toBe('in_progress');
+
+    expect($providerToolEvents[1]->type)->toBe('image_generation_call')
+        ->and($providerToolEvents[1]->status)->toBe('generating');
+
+    expect($providerToolEvents[2]->status)->toBe('partial_image')
+        ->and($providerToolEvents[2]->data['partial_image_index'])->toBe(0)
+        ->and($providerToolEvents[2]->data['partial_image_b64'])->toBe('base64partial1');
+
+    expect($providerToolEvents[3]->status)->toBe('partial_image')
+        ->and($providerToolEvents[3]->data['partial_image_index'])->toBe(1)
+        ->and($providerToolEvents[3]->data['partial_image_b64'])->toBe('base64partial2');
+
+    expect($providerToolEvents[4]->status)->toBe('completed')
+        ->and($providerToolEvents[4]->data['result'])->toBe('base64finalimage');
 });
