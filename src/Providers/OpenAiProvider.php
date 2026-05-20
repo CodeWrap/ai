@@ -2,6 +2,7 @@
 
 namespace Laravel\Ai\Providers;
 
+use Illuminate\Support\Arr;
 use Illuminate\Support\Collection;
 use Laravel\Ai\Contracts\Gateway\FileGateway;
 use Laravel\Ai\Contracts\Gateway\StoreGateway;
@@ -11,15 +12,17 @@ use Laravel\Ai\Contracts\Providers\FileProvider;
 use Laravel\Ai\Contracts\Providers\ImageProvider;
 use Laravel\Ai\Contracts\Providers\StoreProvider;
 use Laravel\Ai\Contracts\Providers\SupportsFileSearch;
+use Laravel\Ai\Contracts\Providers\SupportsImageGeneration;
 use Laravel\Ai\Contracts\Providers\SupportsWebSearch;
 use Laravel\Ai\Contracts\Providers\TextProvider;
 use Laravel\Ai\Contracts\Providers\TranscriptionProvider;
 use Laravel\Ai\Gateway\OpenAi\OpenAiFileGateway;
 use Laravel\Ai\Gateway\OpenAi\OpenAiStoreGateway;
 use Laravel\Ai\Providers\Tools\FileSearch;
+use Laravel\Ai\Providers\Tools\ImageGeneration;
 use Laravel\Ai\Providers\Tools\WebSearch;
 
-class OpenAiProvider extends Provider implements AudioProvider, EmbeddingProvider, FileProvider, ImageProvider, StoreProvider, SupportsFileSearch, SupportsWebSearch, TextProvider, TranscriptionProvider
+class OpenAiProvider extends Provider implements AudioProvider, EmbeddingProvider, FileProvider, ImageProvider, StoreProvider, SupportsFileSearch, SupportsImageGeneration, SupportsWebSearch, TextProvider, TranscriptionProvider
 {
     use Concerns\GeneratesAudio;
     use Concerns\GeneratesEmbeddings;
@@ -75,6 +78,27 @@ class OpenAiProvider extends Provider implements AudioProvider, EmbeddingProvide
                 ])
                 : null,
         ]);
+    }
+
+    /**
+     * Get the image generation tool options for the provider.
+     */
+    public function imageGenerationToolOptions(ImageGeneration $generation): array
+    {
+        $options = Arr::except($generation->options, ['type']);
+
+        return [
+            ...$options,
+            ...Arr::whereNotNull([
+                'background' => $generation->background,
+                'input_image_mask' => $generation->inputImageMask,
+                'output_compression' => $generation->outputCompression,
+                'output_format' => $generation->outputFormat,
+                'partial_images' => $generation->partialImages,
+                'quality' => $generation->quality,
+                'size' => $generation->size,
+            ]),
+        ];
     }
 
     /**
