@@ -80,8 +80,9 @@ extending `Provider` gets it for free.
 providers. Existing tests keep passing, but if you assert on exact messages or
 streamed events, four behaviors are now more realistic:
 
-- Faking a tool call for a tool the agent has not registered throws
-  `NoSuchToolException` instead of being silently skipped. Register the tool.
+- Faking a tool call for a tool the agent has not registered returns an error
+  tool result instead of being silently skipped. The model receives the error
+  and can self-correct on the next step.
 - After a faked tool call, `$response->messages` includes the final assistant
   reply (one extra message). `text`, `toolCalls`, `toolResults`, and `steps`
   are unchanged.

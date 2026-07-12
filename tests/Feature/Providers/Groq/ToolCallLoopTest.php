@@ -2,7 +2,6 @@
 
 use GuzzleHttp\Promise\PromiseInterface;
 use Illuminate\Support\Facades\Http;
-use Laravel\Ai\Exceptions\NoSuchToolException;
 use Tests\Fixtures\Agents\MultiStepToolAgent;
 use Tests\Fixtures\Agents\ToolUsingAgent;
 
@@ -92,39 +91,54 @@ test('multi step tool loop returns accumulated response shape', function () {
         ->and($response->usage->completionTokens)->toBe(11);
 });
 
-test('unknown tool call throws', function () {
+test('unknown tool call returns error tool result', function () {
     Http::fake([
-        'api.groq.com/*' => Http::response([
-            'id' => 'chatcmpl-missing',
-            'object' => 'chat.completion',
-            'model' => 'openai/gpt-oss-20b',
-            'choices' => [[
-                'index' => 0,
-                'message' => [
-                    'role' => 'assistant',
-                    'content' => null,
-                    'tool_calls' => [[
-                        'id' => 'call_missing',
-                        'type' => 'function',
-                        'function' => [
-                            'name' => 'MissingTool',
-                            'arguments' => '{}',
-                        ],
-                    ]],
+        'api.groq.com/*' => Http::sequence([
+            Http::response([
+                'id' => 'chatcmpl-missing',
+                'object' => 'chat.completion',
+                'model' => 'openai/gpt-oss-20b',
+                'choices' => [[
+                    'index' => 0,
+                    'message' => [
+                        'role' => 'assistant',
+                        'content' => null,
+                        'tool_calls' => [[
+                            'id' => 'call_missing',
+                            'type' => 'function',
+                            'function' => [
+                                'name' => 'MissingTool',
+                                'arguments' => '{}',
+                            ],
+                        ]],
+                    ],
+                    'finish_reason' => 'tool_calls',
+                ]],
+                'usage' => [
+                    'prompt_tokens' => 10,
+                    'completion_tokens' => 5,
                 ],
-                'finish_reason' => 'tool_calls',
-            ]],
-            'usage' => [
-                'prompt_tokens' => 10,
-                'completion_tokens' => 5,
-            ],
+            ]),
+            Http::response([
+                'id' => 'chatcmpl-recovered',
+                'object' => 'chat.completion',
+                'model' => 'openai/gpt-oss-20b',
+                'choices' => [[
+                    'index' => 0,
+                    'message' => ['role' => 'assistant', 'content' => 'recovered'],
+                    'finish_reason' => 'stop',
+                ]],
+                'usage' => ['prompt_tokens' => 10, 'completion_tokens' => 5],
+            ]),
         ]),
     ]);
 
-    expect(fn () => (new MultiStepToolAgent)->prompt(
+    $response = (new MultiStepToolAgent)->prompt(
         'Generate numbers',
         provider: 'groq',
-    ))->toThrow(NoSuchToolException::class);
+    );
+
+    expect($response->steps[0]->toolResults[0]->result)->toBe('Error: Tool "MissingTool" not found.');
 });
 
 function fakeUniqueGroqToolCallResponse(): PromiseInterface

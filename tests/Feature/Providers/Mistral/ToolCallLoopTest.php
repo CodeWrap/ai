@@ -1,7 +1,6 @@
 <?php
 
 use Illuminate\Support\Facades\Http;
-use Laravel\Ai\Exceptions\NoSuchToolException;
 use Tests\Fixtures\Agents\MultiStepToolAgent;
 use Tests\Fixtures\Agents\ToolUsingAgent;
 
@@ -91,17 +90,20 @@ test('multi step tool loop returns accumulated response shape', function () {
         ->and($response->usage->completionTokens)->toBe(15);
 });
 
-test('unregistered tool call throws', function () {
+test('unregistered tool call returns error tool result', function () {
     Http::fake([
         '*' => Http::sequence([
             $this->fakeToolCallResponse('NonExistentTool', 'call_'.uniqid()),
+            $this->fakeTextResponse('recovered'),
         ]),
     ]);
 
-    expect(fn () => (new MultiStepToolAgent)->prompt(
+    $response = (new MultiStepToolAgent)->prompt(
         'Generate numbers',
         provider: 'mistral',
-    ))->toThrow(NoSuchToolException::class);
+    );
+
+    expect($response->steps[0]->toolResults[0]->result)->toBe('Error: Tool "NonExistentTool" not found.');
 });
 
 test('follow up request includes original messages', function () {

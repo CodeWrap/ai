@@ -2,7 +2,6 @@
 
 use GuzzleHttp\Promise\PromiseInterface;
 use Illuminate\Support\Facades\Http;
-use Laravel\Ai\Exceptions\NoSuchToolException;
 use Tests\Fixtures\Agents\MultiStepToolAgent;
 use Tests\Fixtures\Agents\ToolUsingAgent;
 
@@ -183,32 +182,44 @@ test('multi step tool loop returns accumulated response shape', function () {
         ->and($response->usage->completionTokens)->toBe(11);
 });
 
-test('unregistered tool call throws NoSuchToolException', function () {
+test('unregistered tool call returns error tool result', function () {
     Http::fake([
-        '*' => Http::response([
-            'model' => 'llama3.1:8b',
-            'message' => [
-                'role' => 'assistant',
-                'content' => '',
-                'tool_calls' => [[
-                    'id' => 'call_123',
-                    'function' => [
-                        'name' => 'UnregisteredTool',
-                        'arguments' => (object) [],
-                    ],
-                ]],
-            ],
-            'done_reason' => 'tool_calls',
-            'done' => true,
-            'prompt_eval_count' => 10,
-            'eval_count' => 5,
+        '*' => Http::sequence([
+            Http::response([
+                'model' => 'llama3.1:8b',
+                'message' => [
+                    'role' => 'assistant',
+                    'content' => '',
+                    'tool_calls' => [[
+                        'id' => 'call_123',
+                        'function' => [
+                            'name' => 'UnregisteredTool',
+                            'arguments' => (object) [],
+                        ],
+                    ]],
+                ],
+                'done_reason' => 'tool_calls',
+                'done' => true,
+                'prompt_eval_count' => 10,
+                'eval_count' => 5,
+            ]),
+            Http::response([
+                'model' => 'llama3.1:8b',
+                'message' => ['role' => 'assistant', 'content' => 'recovered'],
+                'done_reason' => 'stop',
+                'done' => true,
+                'prompt_eval_count' => 10,
+                'eval_count' => 5,
+            ]),
         ]),
     ]);
 
-    expect(fn () => (new MultiStepToolAgent)->prompt(
+    $response = (new MultiStepToolAgent)->prompt(
         'Generate a number',
         provider: 'ollama',
-    ))->toThrow(NoSuchToolException::class);
+    );
+
+    expect($response->steps[0]->toolResults[0]->result)->toBe('Error: Tool "UnregisteredTool" not found.');
 });
 
 function fakeUniqueOllamaToolCallResponse(): PromiseInterface

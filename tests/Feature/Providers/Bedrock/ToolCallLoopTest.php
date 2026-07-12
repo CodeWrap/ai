@@ -1,7 +1,6 @@
 <?php
 
 use Illuminate\JsonSchema\JsonSchemaTypeFactory;
-use Laravel\Ai\Exceptions\NoSuchToolException;
 use Laravel\Ai\Gateway\TextGenerationLoop;
 use Laravel\Ai\Gateway\TextGenerationOptions;
 use Laravel\Ai\Messages\UserMessage;
@@ -80,23 +79,34 @@ describe('tool call loop', function () {
         expect($response->steps)->toHaveCount(2);
     });
 
-    test('unknown tool call throws NoSuchToolException', function () {
-        $client = $this->fakeBedrockConverse([
-            'output' => ['message' => ['content' => [
-                ['toolUse' => ['toolUseId' => 't1', 'name' => 'NonExistentTool', 'input' => []]],
-            ]]],
-            'usage' => ['inputTokens' => 7, 'outputTokens' => 3],
-            'stopReason' => 'tool_use',
+    test('unknown tool call returns error tool result', function () {
+        $client = $this->fakeBedrockConverseSequence([
+            [
+                'output' => ['message' => ['content' => [
+                    ['toolUse' => ['toolUseId' => 't1', 'name' => 'NonExistentTool', 'input' => []]],
+                ]]],
+                'usage' => ['inputTokens' => 7, 'outputTokens' => 3],
+                'stopReason' => 'tool_use',
+            ],
+            [
+                'output' => ['message' => ['content' => [
+                    ['text' => 'recovered'],
+                ]]],
+                'usage' => ['inputTokens' => 7, 'outputTokens' => 3],
+                'stopReason' => 'end_turn',
+            ],
         ]);
 
         $gateway = $this->gatewayWithClient($client);
 
-        expect(fn () => (new TextGenerationLoop($gateway))->generate(
+        $response = (new TextGenerationLoop($gateway))->generate(
             $this->bedrockProvider(),
             'anthropic.claude-opus-4-7-v1:0',
             null,
             tools: [new FixedNumberGenerator],
-        ))->toThrow(NoSuchToolException::class);
+        );
+
+        expect($response->steps[0]->toolResults[0]->result)->toBe('Error: Tool "NonExistentTool" not found.');
     });
 
     test('structured output is parsed from the synthetic tool call', function () {

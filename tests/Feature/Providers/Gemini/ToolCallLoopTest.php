@@ -1,7 +1,6 @@
 <?php
 
 use Illuminate\Support\Facades\Http;
-use Laravel\Ai\Exceptions\NoSuchToolException;
 use Tests\Fixtures\Agents\MultiStepToolAgent;
 use Tests\Fixtures\Agents\NamedToolAgent;
 use Tests\Fixtures\Agents\ToolUsingAgent;
@@ -95,16 +94,17 @@ test('multi step tool loop returns accumulated response shape', function () {
         ->and($response->usage->completionTokens)->toBe(15);
 });
 
-test('unregistered tool call throws', function () {
+test('unregistered tool call returns error tool result', function () {
     Http::fake([
         'generativelanguage.googleapis.com/*' => Http::sequence([
             $this->fakeToolCallResponse('NonExistentTool', 'call_missing'),
-            $this->fakeTextResponse('Done'),
+            $this->fakeTextResponse('recovered'),
         ]),
     ]);
 
-    expect(fn () => (new ToolUsingAgent(fixed: true))->prompt('Generate', provider: 'gemini'))
-        ->toThrow(NoSuchToolException::class);
+    $response = (new ToolUsingAgent(fixed: true))->prompt('Generate', provider: 'gemini');
+
+    expect($response->steps[0]->toolResults[0]->result)->toBe('Error: Tool "NonExistentTool" not found.');
 });
 
 test('function response includes id for gemini 3', function () {
