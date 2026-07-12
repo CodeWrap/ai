@@ -18,6 +18,7 @@ use Laravel\Ai\Streaming\Events\ReasoningStart;
 use Laravel\Ai\Streaming\Events\StreamEvent;
 use Laravel\Ai\Streaming\Events\StreamStart;
 use Laravel\Ai\Streaming\Events\TextDelta;
+use Laravel\Ai\Streaming\Events\ToolInputDelta;
 use Laravel\Ai\Streaming\Events\TextEnd;
 use Laravel\Ai\Streaming\Events\TextStart;
 use Laravel\Ai\Streaming\Events\ToolCall as ToolCallEvent;
@@ -213,9 +214,23 @@ trait HandlesTextGeneration
             if ($type === 'response.function_call_arguments.delta') {
                 $callId = $data['item_id'] ?? null;
 
+                $delta = $data['delta'] ?? '';
+
                 foreach ($pendingToolCalls as &$call) {
                     if (($call['id'] ?? null) === $callId) {
-                        $call['arguments'] .= $data['delta'] ?? '';
+                        $call['arguments'] .= $delta;
+
+                        if ($delta !== '') {
+                            yield (new ToolInputDelta(
+                                $this->generateEventId(),
+                                $call['id'] ?? '',
+                                $call['name'] ?? '',
+                                $delta,
+                                $call['arguments'],
+                                time(),
+                            ))->withInvocationId($invocationId);
+                        }
+
                         break;
                     }
                 }

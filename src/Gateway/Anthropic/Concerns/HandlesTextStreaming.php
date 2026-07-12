@@ -16,6 +16,7 @@ use Laravel\Ai\Streaming\Events\ReasoningEnd;
 use Laravel\Ai\Streaming\Events\ReasoningStart;
 use Laravel\Ai\Streaming\Events\StreamStart;
 use Laravel\Ai\Streaming\Events\TextDelta;
+use Laravel\Ai\Streaming\Events\ToolInputDelta;
 use Laravel\Ai\Streaming\Events\TextEnd;
 use Laravel\Ai\Streaming\Events\TextStart;
 use Laravel\Ai\Streaming\Events\ToolCall as ToolCallEvent;
@@ -229,6 +230,17 @@ trait HandlesTextStreaming
 
                     if ($currentBlockType === 'tool_use' && $currentToolIndex >= 0 && isset($pendingToolCalls[$currentToolIndex])) {
                         $pendingToolCalls[$currentToolIndex]['arguments'] .= $partial;
+
+                        if ($partial !== '') {
+                            yield (new ToolInputDelta(
+                                $this->generateEventId(),
+                                $pendingToolCalls[$currentToolIndex]['id'] ?? '',
+                                $pendingToolCalls[$currentToolIndex]['name'] ?? '',
+                                $partial,
+                                $pendingToolCalls[$currentToolIndex]['arguments'],
+                                time(),
+                            ))->withInvocationId($invocationId);
+                        }
                     } elseif ($currentBlockType === 'server_tool_use') {
                         $currentServerToolInput .= $partial;
                     }
