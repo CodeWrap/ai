@@ -5,7 +5,6 @@ use Illuminate\Support\Facades\Http;
 use Laravel\Ai\Attributes\MaxSteps;
 use Laravel\Ai\Contracts\Agent;
 use Laravel\Ai\Contracts\HasTools;
-use Laravel\Ai\Exceptions\NoSuchToolException;
 use Laravel\Ai\Promptable;
 use Tests\Fixtures\Agents\MultiStepToolAgent;
 use Tests\Fixtures\Tools\FixedNumberGenerator;
@@ -98,29 +97,43 @@ test('multi step tool loop returns accumulated response shape', function () {
         ->and($response->usage->completionTokens)->toBe(11);
 });
 
-test('unregistered tool call throws no such tool exception', function () {
+test('unregistered tool call returns error tool result', function () {
     Http::fake([
-        '*' => Http::response([
-            'id' => 'chatcmpl-tool-123',
-            'object' => 'chat.completion',
-            'model' => 'anthropic/claude-sonnet-4.6',
-            'choices' => [[
-                'index' => 0,
-                'message' => [
-                    'role' => 'assistant',
-                    'content' => null,
-                    'tool_calls' => [[
-                        'id' => 'call_123',
-                        'type' => 'function',
-                        'function' => ['name' => 'UnregisteredTool', 'arguments' => '{}'],
-                    ]],
-                ],
-                'finish_reason' => 'tool_calls',
-            ]],
-            'usage' => ['prompt_tokens' => 10, 'completion_tokens' => 5],
+        '*' => Http::sequence([
+            Http::response([
+                'id' => 'chatcmpl-tool-123',
+                'object' => 'chat.completion',
+                'model' => 'anthropic/claude-sonnet-4.6',
+                'choices' => [[
+                    'index' => 0,
+                    'message' => [
+                        'role' => 'assistant',
+                        'content' => null,
+                        'tool_calls' => [[
+                            'id' => 'call_123',
+                            'type' => 'function',
+                            'function' => ['name' => 'UnregisteredTool', 'arguments' => '{}'],
+                        ]],
+                    ],
+                    'finish_reason' => 'tool_calls',
+                ]],
+                'usage' => ['prompt_tokens' => 10, 'completion_tokens' => 5],
+            ]),
+            Http::response([
+                'id' => 'chatcmpl-recovered',
+                'object' => 'chat.completion',
+                'model' => 'anthropic/claude-sonnet-4.6',
+                'choices' => [[
+                    'index' => 0,
+                    'message' => ['role' => 'assistant', 'content' => 'recovered'],
+                    'finish_reason' => 'stop',
+                ]],
+                'usage' => ['prompt_tokens' => 10, 'completion_tokens' => 5],
+            ]),
         ]),
     ]);
 
-    expect(fn () => agent(tools: [new FixedNumberGenerator])->prompt('Give me a number', provider: 'openrouter'))
-        ->toThrow(NoSuchToolException::class);
+    $response = agent(tools: [new FixedNumberGenerator])->prompt('Give me a number', provider: 'openrouter');
+
+    expect($response->steps[0]->toolResults[0]->result)->toBe('Error: Tool "UnregisteredTool" not found.');
 });

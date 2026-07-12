@@ -2,7 +2,6 @@
 
 use GuzzleHttp\Promise\PromiseInterface;
 use Illuminate\Support\Facades\Http;
-use Laravel\Ai\Exceptions\NoSuchToolException;
 use Tests\Fixtures\Agents\MultiStepToolAgent;
 use Tests\Fixtures\Agents\ToolUsingAgent;
 
@@ -92,39 +91,54 @@ test('multi step tool loop returns accumulated response shape', function () {
         ->and($response->usage->completionTokens)->toBe(11);
 });
 
-test('unknown tool call throws no such tool exception', function () {
+test('unknown tool call returns error tool result', function () {
     Http::fake([
-        'api.deepseek.com/*' => Http::response([
-            'id' => 'chatcmpl-tool-unknown',
-            'object' => 'chat.completion',
-            'model' => 'deepseek-chat',
-            'choices' => [[
-                'index' => 0,
-                'message' => [
-                    'role' => 'assistant',
-                    'content' => null,
-                    'tool_calls' => [[
-                        'id' => 'call_unknown',
-                        'type' => 'function',
-                        'function' => [
-                            'name' => 'UnregisteredTool',
-                            'arguments' => '{}',
-                        ],
-                    ]],
+        'api.deepseek.com/*' => Http::sequence([
+            Http::response([
+                'id' => 'chatcmpl-tool-unknown',
+                'object' => 'chat.completion',
+                'model' => 'deepseek-chat',
+                'choices' => [[
+                    'index' => 0,
+                    'message' => [
+                        'role' => 'assistant',
+                        'content' => null,
+                        'tool_calls' => [[
+                            'id' => 'call_unknown',
+                            'type' => 'function',
+                            'function' => [
+                                'name' => 'UnregisteredTool',
+                                'arguments' => '{}',
+                            ],
+                        ]],
+                    ],
+                    'finish_reason' => 'tool_calls',
+                ]],
+                'usage' => [
+                    'prompt_tokens' => 10,
+                    'completion_tokens' => 5,
                 ],
-                'finish_reason' => 'tool_calls',
-            ]],
-            'usage' => [
-                'prompt_tokens' => 10,
-                'completion_tokens' => 5,
-            ],
+            ]),
+            Http::response([
+                'id' => 'chatcmpl-recovered',
+                'object' => 'chat.completion',
+                'model' => 'deepseek-chat',
+                'choices' => [[
+                    'index' => 0,
+                    'message' => ['role' => 'assistant', 'content' => 'recovered'],
+                    'finish_reason' => 'stop',
+                ]],
+                'usage' => ['prompt_tokens' => 10, 'completion_tokens' => 5],
+            ]),
         ]),
     ]);
 
-    expect(fn () => (new MultiStepToolAgent)->prompt(
+    $response = (new MultiStepToolAgent)->prompt(
         'Generate numbers',
         provider: 'deepseek',
-    ))->toThrow(NoSuchToolException::class);
+    );
+
+    expect($response->steps[0]->toolResults[0]->result)->toBe('Error: Tool "UnregisteredTool" not found.');
 });
 
 function fakeUniqueDeepSeekToolCallResponse(): PromiseInterface

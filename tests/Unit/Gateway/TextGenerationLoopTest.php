@@ -4,7 +4,6 @@ use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Laravel\Ai\Contracts\Gateway\StepTextGateway;
 use Laravel\Ai\Contracts\Providers\TextProvider;
 use Laravel\Ai\Contracts\Tool;
-use Laravel\Ai\Exceptions\NoSuchToolException;
 use Laravel\Ai\Gateway\StepContext;
 use Laravel\Ai\Gateway\StepResponse;
 use Laravel\Ai\Gateway\TextGenerationLoop;
@@ -181,7 +180,7 @@ test('it accumulates streamed usage across multi-step turns', function () {
         ->and($streamEnd->reason)->toBe(FinishReason::Stop->value);
 });
 
-test('it throws when generation tool calls do not match local tools', function () {
+test('it returns error tool result when generation tool calls do not match local tools', function () {
     $gateway = new TextGenerationLoopFakeGateway([
         new StepResponse(
             text: '',
@@ -191,9 +190,16 @@ test('it throws when generation tool calls do not match local tools', function (
             meta: new Meta('fake', 'model'),
             continuationToken: 'response-1',
         ),
+        new StepResponse(
+            text: 'recovered',
+            toolCalls: [],
+            finishReason: FinishReason::Stop,
+            usage: new Usage(10, 1),
+            meta: new Meta('fake', 'model'),
+        ),
     ]);
 
-    expect(fn () => (new TextGenerationLoop($gateway))->generate(
+    $response = (new TextGenerationLoop($gateway))->generate(
         textGenerationLoopProvider(),
         'model',
         null,
@@ -202,19 +208,27 @@ test('it throws when generation tool calls do not match local tools', function (
         null,
         null,
         null,
-    ))->toThrow(NoSuchToolException::class, "Model tried to call unavailable tool 'MissingTool'.");
+    );
+
+    expect($response->steps)->toHaveCount(2)
+        ->and($response->steps[0]->toolResults[0]->result)->toBe('Error: Tool "MissingTool" not found.')
+        ->and($response->text)->toBe('recovered');
 });
 
-test('it throws when streaming tool calls do not match local tools', function () {
+test('it returns error tool result when streaming tool calls do not match local tools', function () {
     $toolCall = new ToolCall('call-1', 'MissingTool', [], 'call-1');
     $gateway = new TextGenerationLoopFakeGateway(streams: [
         textGenerationLoopStreamStep(
             events: [new ToolCallEvent('tool-call-event', $toolCall, time())],
             returns: new StepResponse(text: '', toolCalls: [$toolCall], finishReason: FinishReason::ToolCalls, usage: new Usage(10, 1), meta: new Meta('fake', 'model'), continuationToken: 'response-1'),
         ),
+        textGenerationLoopStreamStep(
+            events: [new TextDelta('text-delta', 'message-1', 'recovered', time())],
+            returns: new StepResponse(text: 'recovered', toolCalls: [], finishReason: FinishReason::Stop, usage: new Usage(10, 1), meta: new Meta('fake', 'model')),
+        ),
     ]);
 
-    expect(fn () => iterator_to_array((new TextGenerationLoop($gateway))->stream(
+    $events = iterator_to_array((new TextGenerationLoop($gateway))->stream(
         'invocation-1',
         textGenerationLoopProvider(),
         'model',
@@ -224,7 +238,20 @@ test('it throws when streaming tool calls do not match local tools', function ()
         null,
         null,
         null,
-    )))->toThrow(NoSuchToolException::class);
+    ));
+
+    $toolResultEvents = array_filter($events, fn ($e) => $e instanceof \Laravel\Ai\Streaming\Events\ToolResult);
+    $toolResultEvent = array_values($toolResultEvents)[0];
+    $textDeltas = array_filter($events, fn ($e) => $e instanceof TextDelta);
+    $streamEnds = array_filter($events, fn ($e) => $e instanceof StreamEnd);
+    $streamEnd = array_values($streamEnds)[0];
+
+    expect($toolResultEvent->toolResult->result)->toBe('Error: Tool "MissingTool" not found.')
+        ->and($toolResultEvent->successful)->toBeFalse()
+        ->and($toolResultEvent->error)->toBe('Error: Tool "MissingTool" not found.')
+        ->and($textDeltas)->toHaveCount(1)
+        ->and(array_values($textDeltas)[0]->delta)->toBe('recovered')
+        ->and($streamEnd->reason)->toBe(FinishReason::Stop->value);
 });
 
 test('it emits a terminal stream end when a turn yields no stream end or error', function () {
