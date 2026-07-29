@@ -5,6 +5,7 @@ namespace Laravel\Ai\Gateway\Anthropic\Concerns;
 use Laravel\Ai\Messages\AssistantMessage;
 use Laravel\Ai\Messages\Message;
 use Laravel\Ai\Messages\MessageRole;
+use Laravel\Ai\Messages\SystemMessage;
 use Laravel\Ai\Messages\ToolResultMessage;
 use Laravel\Ai\Messages\UserMessage;
 
@@ -23,6 +24,7 @@ trait MapsMessages
             match ($message->role) {
                 MessageRole::User => $this->mapUserMessage($message, $mapped),
                 MessageRole::Assistant => $this->mapAssistantMessage($message, $mapped),
+                MessageRole::System => $this->mapSystemMessage($message, $mapped),
                 MessageRole::ToolResult => $this->mapToolResultMessage($message, $mapped),
             };
         }
@@ -106,6 +108,17 @@ trait MapsMessages
                 'content' => $content,
             ];
         }
+    }
+
+    /**
+     * Map a system message to Anthropic format.
+     */
+    protected function mapSystemMessage(SystemMessage|Message $message, array &$mapped): void
+    {
+        $mapped[] = [
+            'role' => 'system',
+            'content' => $message->content,
+        ];
     }
 
     /**

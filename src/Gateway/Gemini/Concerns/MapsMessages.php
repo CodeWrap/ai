@@ -23,6 +23,7 @@ trait MapsMessages
             match ($message->role) {
                 MessageRole::User => $this->mapUserMessage($message, $contents),
                 MessageRole::Assistant => $this->mapAssistantMessage($message, $contents),
+                MessageRole::System => $this->mapSystemMessage($message, $contents),
                 MessageRole::ToolResult => $this->mapToolResultMessage($message, $contents),
             };
         }
@@ -85,6 +86,20 @@ trait MapsMessages
                 'parts' => $parts,
             ];
         }
+    }
+
+    /**
+     * Map a system message to Gemini format.
+     *
+     * Gemini does not support mid-conversation system messages in its contents
+     * array, so we map them as user messages to preserve the content.
+     */
+    protected function mapSystemMessage(Message $message, array &$contents): void
+    {
+        $contents[] = [
+            'role' => 'user',
+            'parts' => [['text' => $message->content]],
+        ];
     }
 
     /**

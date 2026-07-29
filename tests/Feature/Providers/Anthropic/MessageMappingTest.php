@@ -8,6 +8,8 @@ use Laravel\Ai\Files\Base64Document;
 use Laravel\Ai\Files\LocalImage;
 use Laravel\Ai\Gateway\Anthropic\AnthropicGateway;
 use Laravel\Ai\Messages\AssistantMessage;
+use Laravel\Ai\Messages\SystemMessage;
+use Laravel\Ai\Messages\UserMessage;
 use Laravel\Ai\Responses\Data\ToolCall;
 use Tests\Fixtures\Agents\AssistantAgent;
 use Tests\Fixtures\Agents\ToolUsingAgent;
@@ -471,6 +473,22 @@ test('thinking and redacted_thinking blocks are preserved on replay', function (
     $mapped = $method->invoke($gateway, [$assistant]);
 
     expect($mapped[0]['content'])->toBe($contentBlocks);
+});
+
+test('system message after user message maps to anthropic format in correct order', function () {
+    $gateway = app(AnthropicGateway::class);
+    $method = (new ReflectionClass($gateway))->getMethod('mapMessages');
+    $method->setAccessible(true);
+
+    $mapped = $method->invoke($gateway, [
+        new UserMessage('Hello'),
+        new SystemMessage('Additional context for this user.'),
+    ]);
+
+    expect($mapped)->toHaveCount(2)
+        ->and($mapped[0]['role'])->toBe('user')
+        ->and($mapped[1]['role'])->toBe('system')
+        ->and($mapped[1]['content'])->toBe('Additional context for this user.');
 });
 
 test('system instructions are not in messages array', function () {
