@@ -501,3 +501,27 @@ describe('provider tool citations', function (): void {
         expect($citations)->toBeEmpty();
     });
 });
+
+describe('metadata', function (): void {
+    test('stream start captures provider message id from message_start event', function (): void {
+        Http::fake([
+            'api.anthropic.com/*' => Http::response(
+                body: $this->ssePayload([
+                    $this->messageStart(),
+                    $this->contentBlockStart(0, ['type' => 'text', 'text' => '']),
+                    $this->contentBlockDelta(0, ['type' => 'text_delta', 'text' => 'Hi']),
+                    $this->contentBlockStop(0),
+                    $this->messageDelta('end_turn', 5),
+                ]),
+                status: 200,
+                headers: ['Content-Type' => 'text/event-stream'],
+            ),
+        ]);
+
+        $events = $this->collectStreamEvents();
+        $streamStart = $events[0];
+
+        expect($streamStart)->toBeInstanceOf(StreamStart::class)
+            ->and($streamStart->metadata)->toBe(['provider_message_id' => 'msg_1']);
+    });
+});
