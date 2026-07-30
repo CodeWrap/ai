@@ -32,7 +32,6 @@ trait MapsMessages
             match ($message->role) {
                 MessageRole::User => $this->mapUserMessage($message, $input, $provider),
                 MessageRole::Assistant => $this->mapAssistantMessage($message, $input),
-                MessageRole::System => $this->mapSystemMessage($message, $input),
                 MessageRole::ToolResult => $this->mapToolResultMessage($message, $input),
             };
         }
@@ -113,17 +112,6 @@ trait MapsMessages
                 ],
             ];
         }
-    }
-
-    /**
-     * Map a system message to OpenAI format.
-     */
-    protected function mapSystemMessage(Message $message, array &$input): void
-    {
-        $input[] = [
-            'role' => 'system',
-            'content' => $message->content,
-        ];
     }
 
     /**

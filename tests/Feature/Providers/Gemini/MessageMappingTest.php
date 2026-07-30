@@ -8,12 +8,9 @@ use Laravel\Ai\Contracts\Conversational;
 use Laravel\Ai\Files;
 use Laravel\Ai\Files\Base64Document;
 use Laravel\Ai\Files\LocalImage;
-use Laravel\Ai\Gateway\Gemini\GeminiGateway;
 use Laravel\Ai\Messages\AssistantMessage;
 use Laravel\Ai\Messages\Message;
-use Laravel\Ai\Messages\SystemMessage;
 use Laravel\Ai\Messages\ToolResultMessage;
-use Laravel\Ai\Messages\UserMessage;
 use Laravel\Ai\Promptable;
 use Laravel\Ai\Responses\Data\ToolCall;
 use Laravel\Ai\Responses\Data\ToolResult;
@@ -245,20 +242,4 @@ test('system instructions are not in contents array', function () {
 
         return isset($body['system_instruction']);
     });
-});
-
-test('mid-conversation system message falls back to user role in gemini', function () {
-    $gateway = app(GeminiGateway::class);
-    $method = (new ReflectionClass($gateway))->getMethod('mapMessagesToContents');
-    $method->setAccessible(true);
-
-    $mapped = $method->invoke($gateway, [
-        new UserMessage('Hello'),
-        new SystemMessage('User preferences.'),
-    ]);
-
-    expect($mapped)->toHaveCount(2)
-        ->and($mapped[0]['role'])->toBe('user')
-        ->and($mapped[1]['role'])->toBe('user')
-        ->and($mapped[1]['parts'][0]['text'])->toBe('User preferences.');
 });

@@ -31,7 +31,6 @@ trait MapsMessages
             match ($message->role) {
                 MessageRole::User => $this->mapUserMessage($message, $chatMessages),
                 MessageRole::Assistant => $this->mapAssistantMessage($message, $chatMessages),
-                MessageRole::System => $this->mapSystemMessage($message, $chatMessages),
                 MessageRole::ToolResult => $this->mapToolResultMessage($message, $chatMessages),
             };
         }
@@ -88,17 +87,6 @@ trait MapsMessages
         }
 
         $chatMessages[] = $msg;
-    }
-
-    /**
-     * Map a system message to Chat Completions format.
-     */
-    protected function mapSystemMessage(Message $message, array &$chatMessages): void
-    {
-        $chatMessages[] = [
-            'role' => 'system',
-            'content' => $message->content,
-        ];
     }
 
     /**

@@ -11,7 +11,6 @@ use Laravel\Ai\Contracts\ConversationStore;
 use Laravel\Ai\Files\File;
 use Laravel\Ai\Messages\AssistantMessage;
 use Laravel\Ai\Messages\Message;
-use Laravel\Ai\Messages\SystemMessage;
 use Laravel\Ai\Messages\ToolResultMessage;
 use Laravel\Ai\Messages\UserMessage;
 use Laravel\Ai\Prompts\AgentPrompt;
@@ -145,10 +144,6 @@ class DatabaseConversationStore implements ConversationStore
             ->flatMap(function ($record) {
                 $toolCalls = collect(json_decode($record->tool_calls, true))->values();
                 $toolResults = collect(json_decode($record->tool_results, true))->values();
-
-                if ($record->role === 'system') {
-                    return [new SystemMessage($record->content)];
-                }
 
                 if ($record->role === 'user') {
                     $attachments = $this->rehydrateAttachments($record->attachments);

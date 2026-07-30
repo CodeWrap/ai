@@ -7,9 +7,7 @@ use Laravel\Ai\Enums\Lab;
 use Laravel\Ai\Files;
 use Laravel\Ai\Files\Base64Document;
 use Laravel\Ai\Files\LocalImage;
-use Laravel\Ai\Gateway\OpenAi\OpenAiGateway;
 use Laravel\Ai\Messages\AssistantMessage;
-use Laravel\Ai\Messages\SystemMessage;
 use Laravel\Ai\Messages\ToolResultMessage;
 use Laravel\Ai\Messages\UserMessage;
 use Laravel\Ai\Responses\Data\ToolCall;
@@ -464,17 +462,4 @@ test('system instructions are in input array as system role', function () {
         return $systemMsg !== null
             && str_contains($systemMsg['content'], 'helpful assistant');
     });
-});
-
-test('mid-conversation system message maps to openai format', function () {
-    $gateway = app(OpenAiGateway::class);
-    $method = (new ReflectionClass($gateway))->getMethod('mapSystemMessage');
-    $method->setAccessible(true);
-
-    $mapped = [];
-    $method->invokeArgs($gateway, [new SystemMessage('User preferences follow.'), &$mapped]);
-
-    expect($mapped)->toHaveCount(1)
-        ->and($mapped[0]['role'])->toBe('system')
-        ->and($mapped[0]['content'])->toBe('User preferences follow.');
 });
