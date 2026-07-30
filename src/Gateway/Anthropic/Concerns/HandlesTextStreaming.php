@@ -113,6 +113,7 @@ trait HandlesTextStreaming
                     $provider->name(),
                     $data['message']['model'] ?? $model,
                     time(),
+                    ['provider_message_id' => $data['message']['id'] ?? null],
                 ))->withInvocationId($invocationId);
 
                 continue;
