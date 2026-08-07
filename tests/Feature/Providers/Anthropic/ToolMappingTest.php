@@ -6,6 +6,7 @@ use Laravel\Ai\Providers\Tools\FileSearch;
 use Laravel\Ai\Providers\Tools\WebSearch;
 use Tests\Fixtures\Agents\NamedToolAgent;
 use Tests\Fixtures\Agents\ToolUsingAgent;
+use Tests\Fixtures\Tools\NonStrictTool;
 
 use function Laravel\Ai\agent;
 
@@ -140,6 +141,44 @@ test('advisor constructor rejects invalid cacheTtl', function () {
 test('advisor constructor rejects empty model', function () {
     new Advisor(model: '');
 })->throws(InvalidArgumentException::class);
+
+test('strict tool includes strict true and additionalProperties false', function () {
+    Http::fake([
+        'api.anthropic.com/*' => $this->fakeTextResponse('The number is 42'),
+    ]);
+
+    (new ToolUsingAgent(fixed: true))->prompt(
+        'Generate a number',
+        provider: 'anthropic',
+    );
+
+    Http::assertSent(function ($request) {
+        $tool = collect($request->data()['tools'] ?? [])->firstWhere('name', 'FixedNumberGenerator');
+
+        return $tool !== null
+            && ($tool['strict'] ?? false) === true
+            && ($tool['input_schema']['additionalProperties'] ?? true) === false;
+    });
+});
+
+test('non-strict tool omits strict flag', function () {
+    Http::fake([
+        'api.anthropic.com/*' => $this->fakeTextResponse('ok'),
+    ]);
+
+    agent(
+        'Test',
+        tools: [new NonStrictTool],
+    )->prompt('Do something', provider: 'anthropic');
+
+    Http::assertSent(function ($request) {
+        $tool = collect($request->data()['tools'] ?? [])->firstWhere('name', 'NonStrictTool');
+
+        return $tool !== null
+            && ! isset($tool['strict'])
+            && ! isset($tool['input_schema']['additionalProperties']);
+    });
+});
 
 test('empty schema still includes input schema with type object', function () {
     Http::fake([

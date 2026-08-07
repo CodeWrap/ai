@@ -3,6 +3,7 @@
 namespace Laravel\Ai\Gateway\Anthropic\Concerns;
 
 use Illuminate\JsonSchema\JsonSchemaTypeFactory;
+use Laravel\Ai\Attributes\Strict;
 use Laravel\Ai\Contracts\Providers\SupportsWebFetch;
 use Laravel\Ai\Contracts\Providers\SupportsWebSearch;
 use Laravel\Ai\Contracts\Tool;
@@ -41,22 +42,33 @@ trait MapsTools
      */
     protected function mapTool(Tool $tool): array
     {
+        $strict = Strict::isAppliedTo($tool);
         $schema = $tool->schema(new JsonSchemaTypeFactory);
 
         $inputSchema = ['type' => 'object', 'properties' => (object) []];
 
         if (filled($schema)) {
-            $schemaArray = (new ObjectSchema($schema))->toSchema();
+            $schemaArray = (new ObjectSchema($schema, strict: $strict))->toSchema();
 
             $inputSchema['properties'] = (object) ($schemaArray['properties'] ?? []);
             $inputSchema['required'] = $schemaArray['required'] ?? [];
         }
 
-        return [
+        if ($strict) {
+            $inputSchema['additionalProperties'] = false;
+        }
+
+        $definition = [
             'name' => ToolNameResolver::resolve($tool),
             'description' => (string) $tool->description(),
             'input_schema' => $inputSchema,
         ];
+
+        if ($strict) {
+            $definition['strict'] = true;
+        }
+
+        return $definition;
     }
 
     /**
