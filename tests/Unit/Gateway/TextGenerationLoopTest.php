@@ -16,6 +16,7 @@ use Laravel\Ai\Streaming\Events\Error;
 use Laravel\Ai\Streaming\Events\StreamEnd;
 use Laravel\Ai\Streaming\Events\TextDelta;
 use Laravel\Ai\Streaming\Events\ToolCall as ToolCallEvent;
+use Laravel\Ai\Streaming\Events\ToolResult;
 use Laravel\Ai\Streaming\Events\ToolResult as ToolResultEvent;
 use Laravel\Ai\Tools\Request;
 
@@ -240,7 +241,7 @@ test('it returns error tool result when streaming tool calls do not match local 
         null,
     ));
 
-    $toolResultEvents = array_filter($events, fn ($e) => $e instanceof \Laravel\Ai\Streaming\Events\ToolResult);
+    $toolResultEvents = array_filter($events, fn ($e) => $e instanceof ToolResult);
     $toolResultEvent = array_values($toolResultEvents)[0];
     $textDeltas = array_filter($events, fn ($e) => $e instanceof TextDelta);
     $streamEnds = array_filter($events, fn ($e) => $e instanceof StreamEnd);
