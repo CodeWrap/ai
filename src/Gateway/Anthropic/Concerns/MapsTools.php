@@ -9,6 +9,7 @@ use Laravel\Ai\Contracts\Tool;
 use Laravel\Ai\Enums\Lab;
 use Laravel\Ai\ObjectSchema;
 use Laravel\Ai\Providers\Provider;
+use Laravel\Ai\Providers\Tools\Advisor;
 use Laravel\Ai\Providers\Tools\ProviderTool;
 use Laravel\Ai\Providers\Tools\ToolSearch;
 use Laravel\Ai\Providers\Tools\WebFetch;
@@ -95,8 +96,31 @@ trait MapsTools
         return match (true) {
             $tool instanceof WebFetch => $this->mapWebFetchTool($tool, $provider),
             $tool instanceof WebSearch => $this->mapWebSearchTool($tool, $provider),
+            $tool instanceof Advisor => $this->mapAdvisorTool($tool),
             default => throw new LogicException('Provider tool ['.$tool::class.'] is not supported by Anthropic.'),
         };
+    }
+
+    /**
+     * Map an advisor tool to its Anthropic server-side tool definition.
+     */
+    protected function mapAdvisorTool(Advisor $tool): array
+    {
+        $definition = [
+            'type' => 'advisor_20260301',
+            'name' => 'advisor',
+            'model' => $tool->model,
+        ];
+
+        if ($tool->maxUses !== null) {
+            $definition['max_uses'] = $tool->maxUses;
+        }
+
+        if ($tool->cacheTtl !== null) {
+            $definition['caching'] = ['type' => 'ephemeral', 'ttl' => $tool->cacheTtl];
+        }
+
+        return $definition;
     }
 
     /**
