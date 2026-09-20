@@ -11,6 +11,7 @@ use Laravel\Ai\Messages\AssistantMessage;
 use Laravel\Ai\Responses\Data\ToolCall;
 use Tests\Fixtures\Agents\AssistantAgent;
 use Tests\Fixtures\Agents\ToolUsingAgent;
+use Tests\Fixtures\Tools\ImageReturningTool;
 
 use function Laravel\Ai\agent;
 
@@ -84,6 +85,33 @@ test('tool result follow up maps assistant and tool result messages', function (
     $toolResultBlock = collect($toolResultMsg['content'])->firstWhere('type', 'tool_result');
     expect($toolResultBlock['tool_use_id'])->toBe($toolUseBlock['id'])
         ->and($toolResultBlock['content'])->not->toBeEmpty();
+});
+
+test('tool result with content blocks passes image arrays through to the api', function (): void {
+    Http::fake([
+        'api.anthropic.com/*' => Http::sequence([
+            $this->fakeToolCallResponse('ImageReturningTool'),
+            $this->fakeTextResponse('I can see the image'),
+        ]),
+    ]);
+
+    agent('Inspect images.', tools: [new ImageReturningTool])
+        ->prompt('Show me the screenshot', provider: 'anthropic');
+
+    $followUpMessages = Http::recorded()[1][0]->data()['messages'];
+
+    $toolResultMsg = collect($followUpMessages)->first(fn ($msg) => $msg['role'] === 'user'
+        && collect($msg['content'] ?? [])->contains('type', 'tool_result')
+    );
+
+    $toolResultBlock = collect($toolResultMsg['content'])->firstWhere('type', 'tool_result');
+
+    expect($toolResultBlock['content'])->toBeArray()
+        ->and($toolResultBlock['content'][0]['type'])->toBe('image')
+        ->and($toolResultBlock['content'][0]['source']['type'])->toBe('base64')
+        ->and($toolResultBlock['content'][0]['source']['media_type'])->toBe('image/jpeg')
+        ->and($toolResultBlock['content'][1]['type'])->toBe('text')
+        ->and($toolResultBlock['content'][1]['text'])->toBe('Screenshot of the page');
 });
 
 test('local image attachment without explicit mime type detects mime from file', function (): void {

@@ -148,10 +148,15 @@ trait MapsMessages
     }
 
     /**
-     * Serialize a tool result output value to a string.
+     * Serialize a tool result output value to a string or content block array.
      */
-    protected function serializeToolResultOutput(mixed $output): string
+    protected function serializeToolResultOutput(mixed $output): string|array
     {
+        if (is_array($output) && array_is_list($output) && isset($output[0]['type'])
+            && in_array($output[0]['type'], ['text', 'image', 'document', 'search_result'], true)) {
+            return $output;
+        }
+
         return match (true) {
             is_string($output) => $output,
             is_array($output) => json_encode($output),
