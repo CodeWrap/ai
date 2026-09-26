@@ -522,6 +522,10 @@ describe('metadata', function (): void {
         $streamStart = $events[0];
 
         expect($streamStart)->toBeInstanceOf(StreamStart::class)
-            ->and($streamStart->metadata)->toBe(['provider_message_id' => 'msg_1']);
+            ->and($streamStart->metadata)->toBe([
+                'provider_message_id' => 'msg_1',
+                'cache_diagnostics' => null,
+                'cache_creation' => null,
+            ]);
     });
 });
