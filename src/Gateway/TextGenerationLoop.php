@@ -14,6 +14,7 @@ use Laravel\Ai\Concerns\JoinsReasoning;
 use Laravel\Ai\Contracts\Approvable;
 use Laravel\Ai\Contracts\Gateway\StepTextGateway;
 use Laravel\Ai\Contracts\HasMiddleware;
+use Laravel\Ai\Contracts\Providers\SupportsAdvisor;
 use Laravel\Ai\Contracts\Providers\SupportsCodeExecution;
 use Laravel\Ai\Contracts\Providers\SupportsFileSearch;
 use Laravel\Ai\Contracts\Providers\SupportsToolSearch;
@@ -30,6 +31,7 @@ use Laravel\Ai\Messages\AssistantMessage;
 use Laravel\Ai\Messages\Message;
 use Laravel\Ai\Messages\ToolResultMessage;
 use Laravel\Ai\PendingStep;
+use Laravel\Ai\Providers\Tools\Advisor;
 use Laravel\Ai\Providers\Tools\CodeExecution;
 use Laravel\Ai\Providers\Tools\FileSearch;
 use Laravel\Ai\Providers\Tools\ProviderTool;
@@ -1112,6 +1114,7 @@ class TextGenerationLoop
     protected function toolsSupportedBy(TextProvider $provider, array $tools): array
     {
         return (new Collection($tools))->flatMap(fn ($tool): array => match (true) {
+            $tool instanceof Advisor => $provider instanceof SupportsAdvisor ? [$tool] : [],
             $tool instanceof CodeExecution => $provider instanceof SupportsCodeExecution ? [$tool] : [],
             $tool instanceof FileSearch => $provider instanceof SupportsFileSearch ? [$tool] : [],
             $tool instanceof ToolSearch => $provider instanceof SupportsToolSearch ? [$tool] : $tool->tools,

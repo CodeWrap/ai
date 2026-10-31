@@ -4,6 +4,7 @@ namespace Laravel\Ai\Providers;
 
 use Laravel\Ai\Contracts\Gateway\FileGateway;
 use Laravel\Ai\Contracts\Providers\FileProvider;
+use Laravel\Ai\Contracts\Providers\SupportsAdvisor;
 use Laravel\Ai\Contracts\Providers\SupportsCodeExecution;
 use Laravel\Ai\Contracts\Providers\SupportsToolSearch;
 use Laravel\Ai\Contracts\Providers\SupportsWebFetch;
@@ -15,7 +16,7 @@ use Laravel\Ai\Providers\Tools\CodeExecution;
 use Laravel\Ai\Providers\Tools\WebFetch;
 use Laravel\Ai\Providers\Tools\WebSearch;
 
-class AnthropicProvider extends Provider implements FileProvider, SupportsCodeExecution, SupportsToolSearch, SupportsWebFetch, SupportsWebSearch, TextProvider
+class AnthropicProvider extends Provider implements FileProvider, SupportsAdvisor, SupportsCodeExecution, SupportsToolSearch, SupportsWebFetch, SupportsWebSearch, TextProvider
 {
     use Concerns\GeneratesText;
     use Concerns\HasFileGateway;

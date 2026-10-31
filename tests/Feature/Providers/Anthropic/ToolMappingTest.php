@@ -1,6 +1,7 @@
 <?php
 
 use Illuminate\Support\Facades\Http;
+use Laravel\Ai\Providers\Tools\Advisor;
 use Laravel\Ai\Providers\Tools\CodeExecution;
 use Laravel\Ai\Providers\Tools\WebFetch;
 use Laravel\Ai\Providers\Tools\WebSearch;
@@ -283,3 +284,47 @@ test('code execution tool sends dated type and name', function (): void {
         return data_get($tool, 'type') === 'code_execution_20260120';
     });
 });
+
+test('advisor tool maps to advisor_20260301 definition with model', function (): void {
+    Http::fake([
+        'api.anthropic.com/*' => $this->fakeTextResponse('ok'),
+    ]);
+
+    agent(tools: [new Advisor(model: 'claude-opus-4-6')])->prompt('plan', provider: 'anthropic');
+
+    Http::assertSent(function ($request): bool {
+        $advisor = collect($request->data()['tools'] ?? [])->firstWhere('type', 'advisor_20260301');
+
+        return $advisor !== null
+            && $advisor['name'] === 'advisor'
+            && $advisor['model'] === 'claude-opus-4-6'
+            && ! isset($advisor['max_uses'])
+            && ! isset($advisor['caching']);
+    });
+});
+
+test('advisor tool passes max_uses and caching when set', function (): void {
+    Http::fake([
+        'api.anthropic.com/*' => $this->fakeTextResponse('ok'),
+    ]);
+
+    agent(
+        'Test advisor',
+        tools: [new Advisor(model: 'claude-opus-4-6', maxUses: 4, cacheTtl: '1h')],
+    )->prompt('plan', provider: 'anthropic');
+
+    Http::assertSent(function ($request): bool {
+        $advisor = collect($request->data()['tools'] ?? [])->firstWhere('type', 'advisor_20260301');
+
+        return $advisor['max_uses'] === 4
+            && $advisor['caching'] === ['type' => 'ephemeral', 'ttl' => '1h'];
+    });
+});
+
+test('advisor constructor rejects invalid cacheTtl', function (): void {
+    new Advisor(model: 'claude-opus-4-6', cacheTtl: '10m');
+})->throws(InvalidArgumentException::class);
+
+test('advisor constructor rejects empty model', function (): void {
+    new Advisor(model: '');
+})->throws(InvalidArgumentException::class);
