@@ -261,6 +261,7 @@ trait HandlesTextStreaming
                         $this->generateEventId(),
                         $reasoningId,
                         time(),
+                        signature: $currentSignature,
                     ))->withInvocationId($invocationId);
 
                     $reasoningStartEmitted = false;
