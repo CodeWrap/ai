@@ -21,12 +21,12 @@ trait InvokesTools
      *
      * @param  array<string, mixed>  $arguments
      */
-    protected function executeTool(Tool $tool, array $arguments, ?string $toolCallId = null, ?RunContext $context = null): string
+    protected function executeTool(Tool $tool, array $arguments, ?string $toolCallId = null, ?RunContext $context = null): string|array
     {
         $toolInvocationId = (string) Str::uuid7();
 
         // Any agent prompted while this tool runs, however it was reached, is a child of this tool call...
-        return ParentInvocation::within($context?->invocationId, $toolInvocationId, function () use ($tool, $arguments, $toolCallId, $toolInvocationId, $context): string {
+        return ParentInvocation::within($context?->invocationId, $toolInvocationId, function () use ($tool, $arguments, $toolCallId, $toolInvocationId, $context): string|array {
             $context?->invokingTool($tool, $arguments, $toolInvocationId);
 
             $startedAt = hrtime(true);
@@ -45,7 +45,7 @@ trait InvokesTools
 
             $context?->toolInvoked($tool, $arguments, $result, $toolInvocationId, $this->elapsedMilliseconds($startedAt));
 
-            return (string) $result;
+            return is_array($result) ? $result : (string) $result;
         });
     }
 

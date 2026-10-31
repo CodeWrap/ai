@@ -17,7 +17,7 @@ interface Tool
     /**
      * Execute the tool.
      */
-    public function handle(Request $request): Stringable|string;
+    public function handle(Request $request): Stringable|string|array;
 
     /**
      * Get the tool's schema definition.
